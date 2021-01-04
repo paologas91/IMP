@@ -6,7 +6,7 @@
   - [4.1. Arrays](#41-arrays)
 - [5. Design](#5-design)
   - [5.1. Parser Implementation](#51-parser-implementation)
-    - [5.1.1. Functor, Applicative, Monad and Alternative](#511-functor,-applicative,-monad-and-alternative)
+    - [5.1.1. Functor, Applicative, Monad and Alternative](#511-functor-applicative-monad-and-alternative)
     - [5.1.2. Arithmetic Expression Parsing](#512-arithmetic-expression-parsing)
     - [5.1.3. Boolean Expression Parsing](#513-boolean-expression-parsing)
     - [5.1.4. Command Parser](#514-command-parser)
