@@ -1,3 +1,23 @@
+# Index
+- [1. Introduction](#1.-introduction)
+- [2. IMP Grammar](#2.-imp-Grammar)
+- [3. Environment](#3.-environment)
+- [4. Internal Representation](#4.-internal-representation)
+  - [4.1. Arrays](#4.1.-arrays)
+- [5. Design](#5.-design)
+  - [5.1. Parser Implementation](#5.1.-parser-implementation)
+    - [5.1.1. Functor, Applicative, Monad and Alternative](#5.1.1.-functor,-applicative,-monad-and-alternative)
+    - [5.1.2. Arithmetic Expression Parsing](#5.1.2.-arithmetic-expression-parsing)
+    - [5.1.3. Boolean Expression Parsing](#5.1.3.-boolean-expression-parsing)
+    - [5.1.4. Command Parser](#5.1.4.-command-parser)
+    - [5.1.5. Program Parser](#5.1.5.-program-parser)
+  - [5.2. Interpreter Implementation](#5.2.-interpreter-implementation)
+    - [5.2.1. Arithmetic Expressions Evaluation](#5.2.1.-arithmetic-expressions-evaluation)
+    - [5.2.2. Boolean Expressions Evaluation](#5.2.2.-boolean-expressions-evaluation)
+    - [5.2.3. Array Expressions Evaluation](#5.2.3.-array-expressions-evaluation)
+    - [5.2.4. Commands Evaluation](#5.2.4.-commands-evaluation)
+- [6. Running an example](#6.-running-an-example)
+
 # 1. Introduction
 This is the documentation of a simple interpreter for the IMP language written using Haskell programming language.
 An interpreter, by definition, is a computer program that directly executes instructions written in a programming or scripting language without requiring them previously to have been compiled into a machine language program. The interpreter, indeed, usually transforms the high-level program into an intermediate language before executing it.
@@ -29,19 +49,23 @@ variableDeclaration ::= <AExpDeclaration>
 
 assignment ::= <AExpAssignment>
              | <BExpAssignment>
-             | <ArrayAssignment>
+             | <ArrayAssignmentSingleValue>
+             | <ArrayAssignmentValues>
                       
-AExpDeclaration ::= "int" <identifier> ":=" <aexp> ";"
+AExpDeclaration ::= "int" <identifier> "=" <aexp> ";"
 
-BExpDeclaration ::= "bool" <identifier> ":=" <bexp> ";"
+BExpDeclaration ::= "bool" <identifier> "<-" <bexp> ";"
 
 ArrayDeclaration ::= "array" <identifier> "[" <aexp> "]" ";"
 
-AExpAssignment ::= <identifier> ":=" <aexp> ";" 
+AExpAssignment ::= <identifier> "=" <aexp> ";" 
 
-BExpAssignment ::= <identifier> ":=" <bexp> ";"
+BExpAssignment ::= <identifier> "<-" <bexp> ";"
 
-ArrayAssignment ::= <identifier> "[" <aexp> "]" ":=" <aexp> ";"
+ArrayAssignmentSingleValue ::= <identifier> "[" <aexp> "]" ":=" <aexp> ";"
+
+ArrayAssignmentValues ::= <identifier> ":=" "[" <aexp> ["," <aexp>]* "]" ";"
+                        | <identifier> ":=" <identifier> ";"
 
 ifThenElse ::= "if" "(" <bexp> ")" "{" <program> "}"
              | "if" "(" <bexp> ")" "{" <program> "}" "else" <program> "}"
@@ -103,10 +127,11 @@ To keep track of the variables and their values during the program execution, it
 ```haskell
 type State = Dictionary String Type
 ```
-In this way I can represent the state of the memory by using a dictionary where every variable is kept stored with its corresponding value. In this case we are able to store values of type Integer, Boolean or Array.
+In this way I can represent the state of the memory by using a dictionary where every variable is kept stored with its corresponding value. In this case we are able to store values of type Integer, Boolean or Array of Integers.
 These three kind of types are grouped into an Haskell data type and defined as Type.
+The type Array has been defined in a separated module and will be discussed in the next topic.
 ```haskell
-data Type = IntegerType Int | BooleanType Bool | ArrayType [Int]
+data Type = IntegerType Int | BooleanType Bool | ArrayType (Array Int)
 ```
 Another architectural choice consists in the fact that we are able only to store Integer values into the arrays.
 
@@ -141,7 +166,7 @@ If, for example, at the end of a program execution, the environment contains onl
 [("x", 8), ("y", 1)]
 ```
 
-# 5. Internal representation
+# 4. Internal representation
 As said before, the parser takes a string as input and creates an internal representation of the program. This representation has been defined as something really similar to the grammar of IMP.
 
 A program is defined as a list of commands:
@@ -156,6 +181,9 @@ A command can be:
 - an assignment of an arithmetic expression (more properly we assign its result) to a variable previously declared (which has been declared in the proper way, that is, to store arithmetic expressions);
 - an assignment of a boolean expression (more properly we assign its result) to a variable previously declared (which has been declared in the proper way, that is, to store boolean expressions);
 - an assignment of an arithmetic expression (more properly we assign its result) to a specific position of the array variable previously declared;
+- an assignment to an array variable of:
+  - a list of arithmetic expressions (E.g. [1, 2, 3] or [1, 2*3, 4-1]);
+  - an array variable previously declared.
 - if-then-else construct, which evaluates the boolean expression and if it's true then executes the sub-program after the <em>then</em> keyword, otherwise exectues the one after the <em>else</em> keyword;
 - while contruct, which evaluates the boolean condition and executes the sub-program in the parenthesis until it remains true.
 ```haskell
@@ -167,6 +195,7 @@ data Command
         | AExpAssignment String AExp
         | BExpAssignment String AExp
         | ArrayAssignment String AExp AExp
+        | ArrayAssignmentValues String ArrayExp
         | IfThenElse BExp [Command] [Command]
         | While BExp [Command]
 ```
@@ -184,7 +213,7 @@ data AExp
     | Sub AExp AExp
     | Mul AExp AExp
 ```
-The last internal representations deals with the boolean expressions which can be:
+The internal representations deals with the boolean expressions which can be:
 - a boolean value;
 - a variable which is able to store a boolean expression;
 - an operator between one or two boolean expressions (in this case Not, which is defined on one boolean expression only, Or and And which are defined on two boolean expressions);
@@ -203,14 +232,56 @@ data BExp
     | Equal AExp AExp
     | NotEqual AExp AExp
 ```
-# 6. Parser implementation
+The last internal representation regards the arrays which can be:
+- a list of arithmetic expressions (E.g. [1, 2, 3] or [1, 2*3, 4-1]);
+- an array variable already declared previously.
+```haskell
+data ArrayExp
+    = ArrayValues [AExp]
+    | ArrayExpVariable String
+```
+
+# 4.1. Arrays
+The arrays are defined as follow in the module <code>Array.hs</code>:
+```haskell
+type Array a = [a]
+```
+with the functions:
+- declare an array of fixed size with all zeroes;
+- read a value from a given position of the array;
+- write a value in the given position of the array.
+```haskell
+declare :: Int -> Array Int
+declare n = replicate n 0
+
+read :: Int -> Array a -> Maybe a
+read _ [] = error "Out of bound"
+read i (v : vs)
+  | i == 0 = Just v
+  | i < 0 = error "Out of bound"
+  | otherwise = Array.read (i - 1) vs
+
+write :: Int -> a -> Array a -> Maybe (Array a)
+write _ _ [] = error "Out of bound"
+write i v' (v : vs)
+  | i == 0 = Just (v' : vs)
+  | i < 0 = error "Out of bound"
+  | otherwise = case write (i - 1) v' vs of
+                    Just vs' -> Just (v : vs')
+                    Nothing -> error "Out of bound"
+```
+# 5. Design
+The interpreter consists of two parts: the first part takes one input file as a String and creates an internal representation of the program (the parser) and the second one which takes the output of the first part and evaluates the program updating the state of the memory (the interpreter).
+
+We start from the analysis of the parser.
+# 5.1. Parser implementation
 A parser can be seen as a function which takes a string as input and produces a couple as output:
 ```haskell
 newtype Parser a = P (String -> Maybe (a, String))
 ```
 where <em>a</em> is the parametrized type and indicates the type of the parser; the string returned with <em>a</em> represents instead the part of the input which has still not be parsed or that failed the parsing procedure. This means that if at the end, the empty string is returned, the parsing has been completed successfully.
 
-# 6.1 Functor, Applicative, Monad and Alternative
+# 5.1.1. Functor, Applicative, Monad and Alternative
 In order to combine parsers together we need to create instances of Functor, Applicative, Monad and Alternative.
 
 The functor allows to apply a function <em>g</em> to a value wrapped in a parser <em>p</em>. 
@@ -261,7 +332,7 @@ class Monad m => Alternative m where
   chain p op = do a <- p; rest a 
    where rest a = (do f <- op; a' <- p; rest (f a a')) <|> return a
 ```
-# 6.2. Arithmetic Expression Parsing
+# 5.1.2. Arithmetic Expression Parsing
 This parser is built in such a way to ensure that for each arithmetic expression will be a single derivation tree. The parser function <strong>aExpParser</strong> is supported by <strong>aTermParser</strong> and <strong>aFactorParser</strong>. These parsers basically are needed to create an order of execution of the arithmetic expressions: given, for example, more priority to multiplication rather than addition and subtraction, and also to execute first the expressions in the brackets.
 
 We can also see the use of the <code>chain</code> for the sum and the subtraction. 
@@ -292,7 +363,7 @@ aFactParser = (do a <- integerNumberParser; return (AExpConstant a))
                      keywordParser ")"
                      return a
 ```
-# 6.3. Boolean Expression Parsing
+# 5.1.3. Boolean Expression Parsing
 A parser for evaluate boolean expressions has been created and the functioning is similar to the one of the arithmetic case: for each boolean expression exists a unique derivation tree. In this case, the and operator has an higher priority with respect to or operation. Moreover, <strong>bExpParser</strong> could need to use <strong>aExpParser</strong>, for example when a comparison between two numbers is required.
 ```haskell
 bExpParser :: Parser BExp
@@ -351,7 +422,7 @@ bFactParser = do keywordParser "True"
               do a <- identifierParser
                  return (BExpVariable a)
 ```
-# 6.4. Command Parser
+# 5.1.4. Command Parser
 The parser for commands is defined as:
 ```haskell
 commandParser :: Parser Command
@@ -363,8 +434,8 @@ commandParser = variableDeclParser
 ```
 where <code>variableDeclParser</code> can be of 3 different types:
 - The first one let us to declare a variable for arithmetic expressions with the keyword <code>int</code> (Example: <code>int a;</code>);
-- The second one let us to declare a variable for boolean expressions with the keyword <code>bool</code> (Example: <code>bool a;</code>);
-- The third one let us to declare an array of integers with the keyword <code>array</code> (Example: <code>array a[10];</code> is an array of integers of size 10).
+- The second one let us to declare a variable for boolean expressions with the keyword <code>bool</code> (E.g.: <code>bool a;</code>);
+- The third one let us to declare an array of integers with the keyword <code>array</code> (E.g.: <code>array a[10];</code> is an array of integers of size 10).
 
 As decribed previously, it's also mandatory to assign a value for the first two cases.
 The implementation is the following:
@@ -414,7 +485,20 @@ assignmentParser = do i <- identifierParser
                           keywordParser ":="
                           a <- aExpParser
                           keywordParser ";"
-                          return (ArrayAssignment i i' a)
+                          return (ArrayAssignmentSingleValue i i' a)
+                       <|>
+                       do keywordParser ":="
+                          keywordParser "["
+                          i' <- aExpParser
+                          i'' <- many (do keywordParser ","; aExpParser)
+                          keywordParser "]"
+                          keywordParser ";"
+                          return (ArrayAssignmentValues i (ArrayValues (i':i'')))
+                       <|>
+                       do keywordParser ":="
+                          x <- identifierParser
+                          keywordParser ";"
+                          return (ArrayAssignmentValues i (ArrayExpVariable x))
 ```
 The following is the <em>skip</em> parser:
 ```haskell
@@ -454,7 +538,7 @@ whileParser = do keywordParser "while"
                  keywordParser "}"
                  return (While b p)
 ```
-# 6.5. Program Parser
+# 5.1.5. Program Parser
 The <em>program</em> parser is defined as many parsers for commands as the following code suggests:
 ```haskell
 programParser :: Parser [Command]
@@ -473,17 +557,17 @@ exeParser s = case result of
 ```
 so that the result of the parser is a list of commands and a string. If the parsing fails, in the sense that there are some errors in the execution of the parser module, then an error is raised; if instead the parsing fails, in the sense that the structure of the program given as input doesn't fit the grammar of IMP, the list of commands contains the part of the program successfully parsed and, the string, the rest of the program which has not been parsed; if lastly it succeds, then the string will be empty and the list of commands will contain all the commands to give as input to the interpreter which is going to evaluate the final result (if it there exists).
 
-# 7. Interpreter Implementation
+# 5.2. Interpreter Implementation
 The main function of the interpreter is to take the output of the parser and work on it. When indeed the parser computes correctly the program, as we said before it returns and internal representation of it and the interpreter has to compute the final result.
 
-For example we have a program to execute which is:
+For example we have a program to execute defined as follow:
 ```
-int i := 1;
-int n := 5;
-int x := 1;
-while (i < n) {
-  x := x * i;
-  i := i + 1;
+int i = 1;
+int n = 5;
+int x = 1;
+while (i <= n) {
+  x = x * i;
+  i = i + 1;
 }
 ```
 then the internal representation of the program which is given as output from the parser and given as input to the interpreter is:
@@ -497,13 +581,18 @@ then the internal representation of the program which is given as output from th
     ]
 ]
 ```
-The interpreter will then compute the program and give us the final result.
+The interpreter will then compute the program and give us the final result (in this case 120).
+
+At the end, the state of the memory will so be the following:
+```haskell
+[("i",IntegerType 6),("n",IntegerType 5),("x",IntegerType 120)]
+```
 
 To make this possible we will need to evaluate arithmetic expressions, boolean expressions and commands.
 
 The results of every single evaluation is a <em>Maybe</em> type so that we can distinguish easily a failure (and raise an error with a custom message to help the user in understanding) from a correct execution.
 
-# 7.1. Arithmetic Expressions Evaluation
+# 5.2.1. Arithmetic Expressions Evaluation
 The evaluation of an arithmetic expression takes a state as input (which represents an internal representation of the memory) and an arithmetic expression (coded in the internal reprentation way) and gives <code>Just Int</code> or <code>Nothing</code> depending of the success or failure of the computation.
 ```haskell
 aExpEval :: State -> AExp -> Maybe Int
@@ -525,7 +614,7 @@ aExpEval s (Add a b) = (+) <$> aExpEval s a <*> aExpEval s b
 aExpEval s (Sub a b) = (-) <$> aExpEval s a <*> aExpEval s b
 aExpEval s (Mul a b) = (*) <$> aExpEval s a <*> aExpEval s b
 ```
-# 7.2. Boolean Expressions Evaluation
+# 5.2.2. Boolean Expressions Evaluation
 The evaluation of a boolean expression takes a state as input (which represents an internal representation of the memory) and a boolean expression (coded in the internal reprentation way) and gives <code>Just Bool</code> or <code>Nothing</code> depending of the success or failure of the computation.
 ```haskell
 bExpEval :: State -> BExp -> Maybe Bool
@@ -546,7 +635,28 @@ bExpEval s (GreaterEqual a b) = (>=) <$> aExpEval s a <*> aExpEval s b
 bExpEval s (Equal a b) = (==) <$> aExpEval s a <*> aExpEval s b
 bExpEval s (NotEqual a b) = (/=) <$> aExpEval s a <*> aExpEval s b
 ```
-# 7.3. Commands Evaluation
+
+# 5.2.3. Array Expressions Evaluation
+The evaluation of an array expression takes as input a state and an array expression and gives as output a <code>Maybe (Array Int)</code> or <code>Nothing</code> depending on the success or failure of the computation.
+
+```haskell
+arrayExpEval :: State -> ArrayExp -> Maybe (Array Int)
+arrayExpEval s (ArrayValues a) = if hasFailed 
+                                    then Nothing
+                                    else Just $ map (\v -> case v of Just x -> x) r
+                                      where hasFailed = or $ map (\v -> case v of
+                                              Nothing -> True
+                                              Just x -> False) r
+                                            r = map (\exp -> aExpEval s exp) a
+arrayExpEval s (ArrayExpVariable v) = 
+  case get s v of
+    Just (IntegerType _) -> error "Assignment of an integer value to an array one not allowed!"
+    Just (BooleanType _) -> error "Assignment of an boolean value to an array one not allowed!"
+    Just (ArrayType a) -> Just a
+    Nothing -> error "Variable to assign not found"
+```
+
+# 5.2.4. Commands Evaluation
 The evaluation of a command takes a state as input (which represents an internal representation of the memory) and a list of commands (coded in the internal reprentation way) and gives <code>Just Bool</code> or <code>Nothing</code> depending of the success or failure of the computation.
 
 The possible commands are the one listed above at the beginning of the documentation:
@@ -556,7 +666,8 @@ The possible commands are the one listed above at the beginning of the documenta
 - ArrayDeclaration;
 - AExpAssignment;
 - BExpAssignment;
-- ArrayAssignment;
+- ArrayAssignmentSingleValue;
+- ArrayAssignmentValues;
 - IfThenElse;
 - While
 ```haskell
@@ -596,13 +707,23 @@ exeCommands s ((BExpAssignment v exp) : cs) =
     Just (IntegerType _) -> error "Assignment of an aExp value to a bExp variable not allowed!"
     Just (ArrayType _) -> error "Assignment of an array value to an bExp variable not allowed!"
     Nothing -> error "Undeclared variable!"
-exeCommands s ((ArrayAssignment v i exp) : cs) =
+exeCommands s ((ArrayAssignmentSingleValue v i exp) : cs) =
   case get s v of
     Just (ArrayType a) -> case aExpEval s exp of
                             Just r -> exeCommands (insert s v (ArrayType exp')) cs
                               where Just exp' = Array.write i' r a
                                                   where Just i' = aExpEval s i
                             Nothing -> error "The expression you want to assign is not valid!"
+    Just (IntegerType _) -> error "Assignment of an aExp value to an array variable not allowed!"
+    Just (BooleanType _) -> error "Assignment of an bExp value to an array variable not allowed!"
+    Nothing -> error "Undeclared variable!"
+exeCommands s ((ArrayAssignmentValues v exp) : cs) =
+  case get s v of
+    Just (ArrayType a) -> case arrayExpEval s exp of
+                            Just b -> if length a == length b 
+                                        then exeCommands (insert s v (ArrayType b)) cs
+                                        else error "Length not valid!"
+                            Nothing -> error "One of the aExp evaluation of the array you want to assign failed"
     Just (IntegerType _) -> error "Assignment of an aExp value to an array variable not allowed!"
     Just (BooleanType _) -> error "Assignment of an bExp value to an array variable not allowed!"
     Nothing -> error "Undeclared variable!"
@@ -617,9 +738,11 @@ exeCommands s ((While b c) : cs) =
     Just False -> exeCommands s cs
     Nothing -> error "Invalid boolean expression!"
 ```
-# 8. Running an example
-To run the example program, navigate to the project directory, then open <code>ghci</code> and load the modules as following:
+# 6. Running an example
+To run the example program, navigate to the project directory folder, then open <code>ghci</code> and load the modules as following:
 ```
-:l app/Main.hs app/Dictiornary.hs app/Grammar.hs app/Interpreter.hs app/Array.hs app/Parser.hs
+:l Main.hs Dictiornary.hs Grammar.hs Interpreter.hs Array.hs Parser.hs
 ```
 Then type <code>main</code> and the program will execute!
+
+If you want to modify the example program and write your own program, just edit the <code>source.txt</code> file.

@@ -19,12 +19,7 @@ instance Functor Parser where
   fmap g (P p) = P (\input -> case p input of
     Nothing -> Nothing
     Just (v, out) -> Just (g v, out))
--- concateno g con la funzione del parser e creo un nuovo parser
--- parse p env input ritorna una lista di triple, se ne ritorna solo una di tripla si verifica ciò che sta a destra della freccia
 
--- l'applicative prende una funzione incapsulata in un parser e un altro parser e
-
--- monad introduce return e sequencing (input monade (oggetto incaps) e una funzione che in input ha un valore non incapsulato e in output ho una monade)
 instance Applicative Parser where
   pure v = P (\input -> Just (v, input))
   (P pg) <*> px = P (\input -> case pg input of
@@ -32,9 +27,6 @@ instance Applicative Parser where
     --[(g, out)] -> case fmap g px of
       --(P p) -> p out)
     Just (g, out) -> p out where (P p) = fmap g px)
--- some deve assere almeno 1
--- many non necessariamente
--- read fa il cast da stringa a intero
 
 instance Monad Parser where
   -- (>>=) :: Parser a -> (a -> Parser b) -> Parser b
@@ -44,7 +36,7 @@ instance Monad Parser where
 
 instance Alternative Parser where
   -- empty :: Parser a
-  empty = P (\input -> Nothing) -- a parser fails if it's empty
+  empty = P (\input -> Nothing)
   -- <|> :: Parser a -> Parser a -> Parser b
   (P p) <|> (P q) = P (\input -> case p input of
                                   Nothing -> q input
@@ -62,7 +54,7 @@ lowercases = ['a' .. 'z']
 uppercases :: [Char]
 uppercases = ['A' .. 'Z']
 
--- reads the next character from the string given as input
+-- Reads the next character from the string given as input
 readNext :: Parser Char
 readNext = P (\input -> case input of
                       [] -> Nothing
@@ -306,20 +298,20 @@ assignmentParser = do i <- identifierParser
                           keywordParser ":="
                           a <- aExpParser
                           keywordParser ";"
-                          return (ArrayAssignment i i' a)
-                       <|> -- x = [1,2,3]
+                          return (ArrayAssignmentSingleValue i i' a)
+                       <|>
                        do keywordParser ":="
                           keywordParser "["
                           i' <- aExpParser
                           i'' <- many (do keywordParser ","; aExpParser)
                           keywordParser "]"
                           keywordParser ";"
-                          return (ArrayAssignment_1 i (ArrayValues (i':i'')))
+                          return (ArrayAssignmentValues i (ArrayValues (i':i'')))
                        <|>
                        do keywordParser ":="
                           x <- identifierParser
                           keywordParser ";"
-                          return (ArrayAssignment_1 i (ArrayExpVariable x))
+                          return (ArrayAssignmentValues i (ArrayExpVariable x))
 
 --                    
 ifThenElseParser :: Parser Command
@@ -361,8 +353,6 @@ commandParser = variableDeclParser
 --
 programParser :: Parser [Command]
 programParser = do many commandParser
-                  -- posso avere anche la lista di comandi vuota, invece con il some devo averne alemno uno di 
-                  -- comando sennò da errore
 
 --
 exeParser :: String -> ([Command], String)

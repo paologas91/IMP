@@ -97,7 +97,7 @@ exeCommands s ((BExpAssignment v exp) : cs) =
     Just (IntegerType _) -> error "Assignment of an aExp value to a bExp variable not allowed!"
     Just (ArrayType _) -> error "Assignment of an array value to an bExp variable not allowed!"
     Nothing -> error "Undeclared variable!"
-exeCommands s ((ArrayAssignment v i exp) : cs) =
+exeCommands s ((ArrayAssignmentSingleValue v i exp) : cs) =
   case get s v of
     Just (ArrayType a) -> case aExpEval s exp of
                             Just r -> exeCommands (insert s v (ArrayType exp')) cs
@@ -107,7 +107,7 @@ exeCommands s ((ArrayAssignment v i exp) : cs) =
     Just (IntegerType _) -> error "Assignment of an aExp value to an array variable not allowed!"
     Just (BooleanType _) -> error "Assignment of an bExp value to an array variable not allowed!"
     Nothing -> error "Undeclared variable!"
-exeCommands s ((ArrayAssignment_1 v exp) : cs) =
+exeCommands s ((ArrayAssignmentValues v exp) : cs) =
   case get s v of
     Just (ArrayType a) -> case arrayExpEval s exp of
                             Just b -> if length a == length b 

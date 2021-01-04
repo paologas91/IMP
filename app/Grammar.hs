@@ -73,9 +73,9 @@ data Command
     --
     | BExpAssignment String BExp
     --
-    | ArrayAssignment String AExp AExp
+    | ArrayAssignmentSingleValue String AExp AExp
     --
-    | ArrayAssignment_1 String ArrayExp
+    | ArrayAssignmentValues String ArrayExp
     --
     | IfThenElse BExp [Command] [Command]
     --
